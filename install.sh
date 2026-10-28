@@ -40,10 +40,15 @@ curl -fsSL "${BASE_URL}/opencode" -o "$TMP_DIR/opencode"
 curl -fsSL "${BASE_URL}/SHA256SUMS" -o "$TMP_DIR/SHA256SUMS"
 
 echo "==> verifying checksum..."
-(cd "$TMP_DIR" && sha256sum -c SHA256SUMS --status --strict < <(grep -E ' opencode$' SHA256SUMS)) || {
+# Portable hash comparison (works with GNU coreutils and BusyBox).
+actual="$(sha256sum "$TMP_DIR/opencode" | awk '{print $1}')"
+expected="$(grep -E ' opencode$' "$TMP_DIR/SHA256SUMS" | awk '{print $1}')"
+if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
   echo "Error: checksum verification failed" >&2
+  echo "  expected: ${expected:-<missing>}" >&2
+  echo "  actual:   $actual" >&2
   exit 1
-}
+fi
 echo "    checksum OK"
 
 echo "==> installing to ${PREFIX_DIR}/bin/opencode..."
