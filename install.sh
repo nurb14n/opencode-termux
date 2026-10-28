@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO="nurb14n/opencode-termux"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 
 step() {
   echo
@@ -50,7 +50,21 @@ step 3 "Downloading checksum file"
 BASE_URL="https://github.com/${REPO}/releases/latest/download"
 curl -fL --progress-bar -o "$TMP_DIR/SHA256SUMS" "${BASE_URL}/SHA256SUMS"
 
-step 4 "Checking installed binary"
+step 4 "Reading version information"
+current_version=""
+if [ -x "${PREFIX_DIR}/bin/opencode" ]; then
+  current_version="$("${PREFIX_DIR}/bin/opencode" --version 2>/dev/null || true)"
+fi
+
+# Best-effort query; do not fail installation if GitHub API is unavailable.
+latest_version="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+  | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  | head -n 1 || true)"
+
+echo "    current: ${current_version:-<not installed>}"
+echo "    latest:  ${latest_version:-<unknown>}"
+
+step 5 "Checking installed binary"
 expected="$(awk '$2 == "opencode" { print $1; exit }' "$TMP_DIR/SHA256SUMS" || true)"
 if [ -z "$expected" ]; then
   echo "Error: could not find 'opencode' entry in SHA256SUMS" >&2
@@ -79,14 +93,14 @@ if [ -n "$local_hash" ]; then
   echo "    installed: $local_hash"
 fi
 
-step 5 "Downloading opencode binary"
+step 6 "Downloading opencode binary"
 if [ "$skip_download" -eq 0 ]; then
   curl -fL --progress-bar -o "$TMP_DIR/opencode" "${BASE_URL}/opencode"
 else
   echo "    skipped"
 fi
 
-step 6 "Verifying SHA256 checksum"
+step 7 "Verifying SHA256 checksum"
 if [ "$skip_download" -eq 0 ]; then
   actual="$(sha256sum "$TMP_DIR/opencode" | awk '{print $1}')"
   echo "    actual:   $actual"
@@ -99,7 +113,7 @@ else
   echo "    skipped (already up to date)"
 fi
 
-step 7 "Installing binary"
+step 8 "Installing binary"
 if [ "$skip_download" -eq 0 ]; then
   mkdir -p "${PREFIX_DIR}/bin"
   install -m755 "$TMP_DIR/opencode" "${PREFIX_DIR}/bin/opencode"
@@ -107,7 +121,7 @@ else
   echo "    skipped"
 fi
 
-step 8 "Checking optional dependencies"
+step 9 "Checking optional dependencies"
 missing=0
 command -v rg >/dev/null || { echo "    [!] ripgrep missing (file search needs it): pkg install ripgrep"; missing=1; }
 command -v git >/dev/null || { echo "    [!] git missing (recommended): pkg install git"; missing=1; }
