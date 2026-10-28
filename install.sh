@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO="nurb14n/opencode-termux"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 
 step() {
   echo
@@ -46,31 +46,68 @@ mkdir -p "$TMP_BASE"
 TMP_DIR="$(mktemp -d "${TMP_BASE}/opencode-install-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-step 3 "Downloading opencode binary"
+step 3 "Downloading checksum file"
 BASE_URL="https://github.com/${REPO}/releases/latest/download"
-curl -fL --progress-bar -o "$TMP_DIR/opencode" "${BASE_URL}/opencode"
-
-step 4 "Downloading checksum file"
 curl -fL --progress-bar -o "$TMP_DIR/SHA256SUMS" "${BASE_URL}/SHA256SUMS"
 
-step 5 "Verifying SHA256 checksum"
-actual="$(sha256sum "$TMP_DIR/opencode" | awk '{print $1}')"
+step 4 "Checking installed binary"
 expected="$(awk '$2 == "opencode" { print $1; exit }' "$TMP_DIR/SHA256SUMS" || true)"
-
-echo "    expected: ${expected:-<missing>}"
-echo "    actual:   $actual"
-
-if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
-  echo "Error: checksum verification failed" >&2
+if [ -z "$expected" ]; then
+  echo "Error: could not find 'opencode' entry in SHA256SUMS" >&2
   exit 1
 fi
-echo "    checksum OK"
 
-step 6 "Installing binary"
-mkdir -p "${PREFIX_DIR}/bin"
-install -m755 "$TMP_DIR/opencode" "${PREFIX_DIR}/bin/opencode"
+local_hash=""
+if [ -x "${PREFIX_DIR}/bin/opencode" ]; then
+  local_hash="$(sha256sum "${PREFIX_DIR}/bin/opencode" | awk '{print $1}')"
+fi
 
-step 7 "Checking optional dependencies"
+skip_download=0
+if [ -n "$local_hash" ] && [ "$local_hash" = "$expected" ]; then
+  skip_download=1
+  echo "    installed binary already matches release checksum"
+  echo "    skipping download and install"
+else
+  if [ -n "$local_hash" ]; then
+    echo "    installed binary differs from release; updating"
+  else
+    echo "    no installed binary found; installing"
+  fi
+fi
+echo "    expected: $expected"
+if [ -n "$local_hash" ]; then
+  echo "    installed: $local_hash"
+fi
+
+step 5 "Downloading opencode binary"
+if [ "$skip_download" -eq 0 ]; then
+  curl -fL --progress-bar -o "$TMP_DIR/opencode" "${BASE_URL}/opencode"
+else
+  echo "    skipped"
+fi
+
+step 6 "Verifying SHA256 checksum"
+if [ "$skip_download" -eq 0 ]; then
+  actual="$(sha256sum "$TMP_DIR/opencode" | awk '{print $1}')"
+  echo "    actual:   $actual"
+  if [ "$actual" != "$expected" ]; then
+    echo "Error: checksum verification failed" >&2
+    exit 1
+  fi
+  echo "    checksum OK"
+else
+  echo "    skipped (already up to date)"
+fi
+
+step 7 "Installing binary"
+if [ "$skip_download" -eq 0 ]; then
+  mkdir -p "${PREFIX_DIR}/bin"
+  install -m755 "$TMP_DIR/opencode" "${PREFIX_DIR}/bin/opencode"
+else
+  echo "    skipped"
+fi
+
+step 8 "Checking optional dependencies"
 missing=0
 command -v rg >/dev/null || { echo "    [!] ripgrep missing (file search needs it): pkg install ripgrep"; missing=1; }
 command -v git >/dev/null || { echo "    [!] git missing (recommended): pkg install git"; missing=1; }
