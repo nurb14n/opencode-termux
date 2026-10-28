@@ -95,6 +95,17 @@ fi
 
 step 6 "Downloading opencode binary"
 if [ "$skip_download" -eq 0 ]; then
+  if [ "${OPENCODE_AUTO_UPDATE:-}" != "1" ] && [ -r /dev/tty ]; then
+    printf "    Update available. Continue? [Y/n] "
+    read -r answer < /dev/tty || answer=""
+    case "${answer:-Y}" in
+      [Yy]*) ;;
+      *)
+        echo "    Update cancelled by user."
+        exit 0
+        ;;
+    esac
+  fi
   curl -fL --progress-bar -o "$TMP_DIR/opencode" "${BASE_URL}/opencode"
 else
   echo "    skipped"
